@@ -14,7 +14,7 @@ use rand::{random_bool, random_range};
 struct Pandemic {
     // Public params
     infection_prob: f32,
-    infection_time: i32,
+    infection_time: f32,
     death_prob: f32,
     step_speed: f32,
 
@@ -31,10 +31,10 @@ const Y_MAX_FLOAT: f32 = Y_MAX as f32;
 impl Pandemic {
     fn new(infected: usize, total: usize) -> Self {
         Self {
-            infection_prob: 0.5,
-            infection_time: 200,
+            infection_prob: 0.7,
+            infection_time: 14000.0,
             death_prob: 0.2,
-            step_speed: 1.0,
+            step_speed: 2.0,
 
             grid: SpatialGrid::new_with_capacity(infected, total),
             last_frame_time: Instant::now(),
@@ -44,7 +44,7 @@ impl Pandemic {
     fn step(&mut self) {
         let rad = 0.3;
         let rad_sq = rad * rad;
-        let frame_time = self.last_frame_time.elapsed().as_millis() as f32;
+        let frame_time = self.last_frame_time.elapsed().as_millis() as f32 * self.step_speed;
         self.last_frame_time = Instant::now();
 
         // Iterate over rows and cols
@@ -53,46 +53,17 @@ impl Pandemic {
                 let mut people_to_move = Vec::new();
                 // Get everyone in grid element
                 if let Some(people) = self.grid.0.get_mut(&(x_pos, y_pos)) {
-                    // Infection testing
-                    for i in 0..people.len() {
-                        let (left, right) = people.split_at_mut(i + 1);
-                        let person1 = &mut left[i];
-
-                        for j in 0..right.len() {
-                            let person2 = &mut right[j];
-
-                            // Close enough to infect
-                            let (dx, dy) =
-                                (person2.pos.x - person1.pos.x, person2.pos.y - person1.pos.y);
-                            let dist_sq = dx.powi(2) + dy.powi(2);
-                            if dist_sq.abs() > rad_sq {
-                                match (
-                                    &person1.state,
-                                    &person2.state,
-                                    random_bool(self.infection_prob as f64),
-                                ) {
-                                    (InfectionState::Healthy, InfectionState::Infected, true) => {
-                                        person1.state = InfectionState::Infected;
-                                    }
-                                    (InfectionState::Infected, InfectionState::Healthy, true) => {
-                                        person2.state = InfectionState::Infected;
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                    }
                     // Step each individual
                     let dist_to_move = 0.01 * frame_time;
-                    people_to_move.extend(people.extract_if(.., move |person| {
+                    people_to_move.extend(people.extract_if(.., |person| {
+                        // Step direction
                         let pos = &mut person.pos;
                         let dir = person.direction;
                         let (x_comp, y_comp) = f32::sin_cos(dir);
-
                         pos.x = pos.x + (dist_to_move * x_comp);
                         pos.y = pos.y + (dist_to_move * y_comp);
 
-                        // Flip direction & reflect back within bounds
+                        // If OOB, flip direction & reflect back
                         if pos.x < 0.0 {
                             pos.x = -pos.x;
                             person.direction = -dir;
@@ -108,14 +79,74 @@ impl Pandemic {
                             person.direction = PI - dir;
                         }
 
+                        if let InfectionState::Infected(t) = person.state {
+                            // Chance to die
+                            let dead = random_bool(
+                                (self.death_prob * (frame_time / self.infection_time)) as f64,
+                            );
+                            if dead {
+                                person.state = InfectionState::Dead;
+                                return true;
+                            }
+
+                            // Update infection time
+                            let new_infection_time = t + frame_time;
+                            person.state = if new_infection_time > self.infection_time {
+                                InfectionState::Recovered
+                            } else {
+                                InfectionState::Infected(new_infection_time)
+                            };
+                        }
+
+                        // Do not retain if out of grid element
                         let grid_x = pos.x as i32;
                         let grid_y = pos.y as i32;
-
                         grid_x != x_pos || grid_y != y_pos
                     }));
+
+                    // Infection testing
+                    for i in 0..people.len() {
+                        let (left, right) = people.split_at_mut(i + 1);
+                        let person1 = &mut left[i];
+
+                        for j in 0..right.len() {
+                            let person2 = &mut right[j];
+
+                            // Close enough to infect
+                            let (dx, dy) =
+                                (person2.pos.x - person1.pos.x, person2.pos.y - person1.pos.y);
+                            let dist_sq = dx.powi(2) + dy.powi(2);
+                            if dist_sq.abs() < rad_sq {
+                                match (
+                                    &person1.state,
+                                    &person2.state,
+                                    random_bool(self.infection_prob as f64),
+                                ) {
+                                    (
+                                        InfectionState::Healthy,
+                                        InfectionState::Infected(_),
+                                        true,
+                                    ) => {
+                                        person1.state = InfectionState::Infected(0.0);
+                                    }
+                                    (
+                                        InfectionState::Infected(_),
+                                        InfectionState::Healthy,
+                                        true,
+                                    ) => {
+                                        person2.state = InfectionState::Infected(0.0);
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
                 }
                 // If people need to be moved, move them
                 for person in people_to_move {
+                    if person.state == InfectionState::Dead {
+                        continue;
+                    }
                     self.grid
                         .0
                         .entry((person.pos.x as i32, person.pos.y as i32))
@@ -148,7 +179,7 @@ impl SpatialGrid {
             map.entry((x as i32, y as i32)).or_default().push(Person {
                 pos: Pos2 { x, y },
                 direction,
-                state: InfectionState::Infected,
+                state: InfectionState::Infected(0.0),
             });
         }
 
@@ -174,8 +205,9 @@ impl SpatialGrid {
                 radius: 5.0,
                 fill: match person.state {
                     InfectionState::Healthy => Color32::GREEN,
-                    InfectionState::Infected => Color32::RED,
+                    InfectionState::Infected(_) => Color32::RED,
                     InfectionState::Recovered => Color32::PURPLE,
+                    InfectionState::Dead => unreachable!("Dead people should be removed before render!"),
                 },
                 stroke: Stroke::NONE,
             })
@@ -190,11 +222,12 @@ struct Person {
     state: InfectionState,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 enum InfectionState {
     Healthy,
-    Infected,
+    Infected(f32),
     Recovered,
+    Dead,
 }
 
 impl App for Pandemic {
