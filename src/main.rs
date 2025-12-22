@@ -1,9 +1,8 @@
 use std::f32::{self, consts::PI};
 use web_time::{Duration, Instant};
-
 use eframe::App;
 use egui::{
-    Button, Color32, Grid, Label, Pos2, Shape, Slider, Stroke, Ui, Vec2, ViewportBuilder,
+    Button, Color32, Grid, Label, Pos2, Shape, Slider, Stroke, Ui, Vec2,
     ahash::{HashMap, HashMapExt},
     epaint::CircleShape,
 };
@@ -12,7 +11,7 @@ use rand::{random_bool, random_range};
 #[cfg(not(target_arch = "wasm32"))]
 fn main() {
     let native_options = eframe::NativeOptions {
-        viewport: ViewportBuilder::default()
+        viewport: egui::ViewportBuilder::default()
             .with_inner_size(Vec2 { x: 800., y: 700. })
             .with_resizable(true),
         ..Default::default()
@@ -163,6 +162,7 @@ impl Pandemic {
                 self.infection_prob = infection_prob;
                 self.infection_time_s = infection_time_s;
                 self.death_prob = death_prob;
+                self.paused = true;
             }
         });
         ui.add_space(20.);
@@ -207,7 +207,7 @@ impl Pandemic {
         let infection_prob = 1.0 - self.infection_prob;
         // Somewhat bastardized estimation
         let not_infected_this_frame =
-            infection_prob.powf(frame_time / ((1.0 / MOVE_AMOUNT) * 0.85)) as f64;
+            infection_prob.powf(frame_time / ((1.0 / MOVE_AMOUNT) * 0.8)) as f64;
 
         // Iterate over rows and cols
         for x_pos in 0..X_MAX {
