@@ -31,9 +31,9 @@ const Y_MAX_FLOAT: f32 = Y_MAX as f32;
 impl Pandemic {
     fn new(infected: usize, total: usize) -> Self {
         Self {
-            infection_prob: 0.7,
+            infection_prob: 0.5,
             infection_time: 14000.0,
-            death_prob: 0.2,
+            death_prob: 0.1,
             step_speed: 2.0,
 
             grid: SpatialGrid::new_with_capacity(infected, total),
@@ -44,6 +44,13 @@ impl Pandemic {
     fn step(&mut self) {
         let frame_time = self.last_frame_time.elapsed().as_millis() as f32 * self.step_speed;
         self.last_frame_time = Instant::now();
+
+
+        let survival_prob = 1.0 - self.death_prob;
+        let survive_this_frame =
+            survival_prob.powf(frame_time / self.infection_time) as f64;
+        let infection_prob = 1.0 - self.infection_prob;
+        let not_infected_this_frame = infection_prob.powf(frame_time / 75.0) as f64;
 
         // Iterate over rows and cols
         for x_pos in 0..X_MAX {
@@ -79,10 +86,8 @@ impl Pandemic {
 
                         if let InfectionState::Infected(t) = person.state {
                             // Chance to die
-                            let dead = random_bool(
-                                (self.death_prob * (frame_time / self.infection_time)) as f64,
-                            );
-                            if dead {
+                            let died = random_bool(1.0 - survive_this_frame);
+                            if died {
                                 person.state = InfectionState::Dead;
                                 return true;
                             }
@@ -110,7 +115,7 @@ impl Pandemic {
                         for person in people {
                             match (
                                 person.state,
-                                random_bool((self.infection_prob * frame_time / 100.0) as f64),
+                                random_bool(1.0 - not_infected_this_frame),
                             ) {
                                 (InfectionState::Healthy, true) => {
                                     person.state = InfectionState::Infected(0.0)
