@@ -12,8 +12,8 @@
     <!-- config for our rust wasm binary. go to https://trunkrs.dev/assets/#rust for more customization -->
     
 <script type="module">
-import init, * as bindings from '/pandemic-b2c8b1505c7a5ef8.js';
-const wasm = await init({ module_or_path: '/pandemic-b2c8b1505c7a5ef8_bg.wasm' });
+import init, * as bindings from '/pandemic/pandemic.js';
+const wasm = await init({ module_or_path: '/pandemic/pandemic_bg.wasm' });
 
 
 window.wasmBindings = bindings;
@@ -23,7 +23,7 @@ dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
 
 </script>
     <!-- this is the base url relative to which other urls will be constructed. trunk will insert this from the public-url option -->
-    <base href="/" />
+    <base href="/pandemic/" />
 
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="white">
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#404040">
@@ -114,7 +114,7 @@ dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
             }
         }
     </style>
-<link rel="modulepreload" href="/pandemic-b2c8b1505c7a5ef8.js" crossorigin="anonymous" integrity="sha384-UKofDnfMpVGUfNEYDOFaUCuq/Fu6OH+qFTE4c6YyrWam4cB3bfL8hTwkn97PRL1B"><link rel="preload" href="/pandemic-b2c8b1505c7a5ef8_bg.wasm" crossorigin="anonymous" integrity="sha384-XSjcjTvIr6mTKOm6dETP0k2hFtF0ZrpTG99nYq6S23Td6PHmporG64ilsg//nE03" as="fetch" type="application/wasm"></head>
+<link rel="modulepreload" href="/pandemic/pandemic.js" crossorigin="anonymous" integrity="sha384-nTb6vv+X/xdC3H4DyXkwNagUiQ5hreeJNpPPagEfT0SalNcZDG7/oXapilZl5tZv"><link rel="preload" href="/pandemic/pandemic_bg.wasm" crossorigin="anonymous" integrity="sha384-G2qlzCFX/v33CK2X4l2p19V02oDhTuFEaowpLxbuFg+d/7dekePdRpojFei9KVNw" as="fetch" type="application/wasm"></head>
 
 <body>
     <!-- The WASM code will resize the canvas dynamically -->
