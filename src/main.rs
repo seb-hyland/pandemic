@@ -42,8 +42,6 @@ impl Pandemic {
     }
 
     fn step(&mut self) {
-        let rad = 0.3;
-        let rad_sq = rad * rad;
         let frame_time = self.last_frame_time.elapsed().as_millis() as f32 * self.step_speed;
         self.last_frame_time = Instant::now();
 
@@ -105,39 +103,19 @@ impl Pandemic {
                     }));
 
                     // Infection testing
-                    for i in 0..people.len() {
-                        let (left, right) = people.split_at_mut(i + 1);
-                        let person1 = &mut left[i];
-
-                        for j in 0..right.len() {
-                            let person2 = &mut right[j];
-
-                            // Close enough to infect
-                            let (dx, dy) =
-                                (person2.pos.x - person1.pos.x, person2.pos.y - person1.pos.y);
-                            let dist_sq = dx.powi(2) + dy.powi(2);
-                            if dist_sq.abs() < rad_sq {
-                                match (
-                                    &person1.state,
-                                    &person2.state,
-                                    random_bool(self.infection_prob as f64),
-                                ) {
-                                    (
-                                        InfectionState::Healthy,
-                                        InfectionState::Infected(_),
-                                        true,
-                                    ) => {
-                                        person1.state = InfectionState::Infected(0.0);
-                                    }
-                                    (
-                                        InfectionState::Infected(_),
-                                        InfectionState::Healthy,
-                                        true,
-                                    ) => {
-                                        person2.state = InfectionState::Infected(0.0);
-                                    }
-                                    _ => {}
+                    let contains_infected = people
+                        .iter()
+                        .any(|person| matches!(person.state, InfectionState::Infected(_)));
+                    if contains_infected {
+                        for person in people {
+                            match (
+                                person.state,
+                                random_bool((self.infection_prob * frame_time / 100.0) as f64),
+                            ) {
+                                (InfectionState::Healthy, true) => {
+                                    person.state = InfectionState::Infected(0.0)
                                 }
+                                _ => {}
                             }
                         }
                     }
@@ -207,7 +185,9 @@ impl SpatialGrid {
                     InfectionState::Healthy => Color32::GREEN,
                     InfectionState::Infected(_) => Color32::RED,
                     InfectionState::Recovered => Color32::PURPLE,
-                    InfectionState::Dead => unreachable!("Dead people should be removed before render!"),
+                    InfectionState::Dead => {
+                        unreachable!("Dead people should be removed before render!")
+                    }
                 },
                 stroke: Stroke::NONE,
             })
