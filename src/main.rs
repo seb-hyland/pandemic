@@ -20,7 +20,7 @@ fn main() {
     eframe::run_native(
         "pandemic",
         native_options,
-        Box::new(|_| Ok(Box::new(Pandemic::new(3, 500)))),
+        Box::new(|_| Ok(Box::new(Pandemic::new(5, 500)))),
     )
     .unwrap();
 }
@@ -47,7 +47,7 @@ fn main() {
             .start(
                 canvas,
                 web_options,
-                Box::new(|_| Ok(Box::new(Pandemic::new(3, 500)))),
+                Box::new(|_| Ok(Box::new(Pandemic::new(5, 500)))),
             )
             .await;
 
@@ -155,17 +155,24 @@ impl Pandemic {
                 self.last_frame_time = Instant::now();
             };
             if ui.add(Button::new("⟳")).clicked() {
+                let infection_prob = self.infection_prob;
+                let infection_time_s = self.infection_time_s;
+                let death_prob = self.death_prob;
+                
                 *self = Self::new(self.init_infected, self.total);
+                self.infection_prob = infection_prob;
+                self.infection_time_s = infection_time_s;
+                self.death_prob = death_prob;
             }
         });
         ui.add_space(20.);
 
         ui.heading("Initial conditions");
         ui.add(Label::new("Initial infected"));
-        ui.add(Slider::new(&mut self.init_infected, 0..=100000));
+        ui.add(Slider::new(&mut self.init_infected, 0..=1000));
 
         ui.add(Label::new("Total people"));
-        ui.add(Slider::new(&mut self.total, 0..=100000));
+        ui.add(Slider::new(&mut self.total, 0..=10000));
         ui.add_space(20.);
 
         ui.heading("Simulation parameters");
