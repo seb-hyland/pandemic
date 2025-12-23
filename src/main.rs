@@ -107,8 +107,8 @@ impl App for Pandemic {
     }
 }
 
-const X_MAX: i32 = 160;
-const Y_MAX: i32 = 100;
+const X_MAX: i32 = 80;
+const Y_MAX: i32 = 50;
 const X_MAX_FLOAT: f32 = X_MAX as f32;
 const Y_MAX_FLOAT: f32 = Y_MAX as f32;
 
@@ -207,7 +207,7 @@ impl Pandemic {
         let infection_prob = 1.0 - self.infection_prob;
         // Somewhat bastardized estimation
         let not_infected_this_frame =
-            infection_prob.powf(frame_time / ((1.0 / MOVE_AMOUNT) * 0.8)) as f64;
+            infection_prob.powf(frame_time / (1.0 / MOVE_AMOUNT)) as f64;
 
         // Iterate over rows and cols
         for x_pos in 0..X_MAX {
@@ -351,7 +351,7 @@ impl SpatialGrid {
         } else {
             (avail.x, avail.y, 0.0, 0.0)
         };
-        let (x_ratio, y_ratio) = (x / 160.0, y / 100.0);
+        let (x_ratio, y_ratio) = (x / X_MAX_FLOAT, y / Y_MAX_FLOAT);
 
         ui.painter().extend(self.0.values().flatten().map(|person| {
             Shape::Circle(CircleShape {
