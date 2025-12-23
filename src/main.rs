@@ -1,12 +1,16 @@
-use std::f32::{self, consts::PI};
-use web_time::{Duration, Instant};
 use eframe::App;
 use egui::{
-    Button, Color32, Grid, Label, Pos2, Shape, Slider, Stroke, Ui, Vec2,
+    Button, Color32, ComboBox, FontId, Frame, Grid, Label, Margin, Pos2,
+    Shape, Slider, Stroke, Ui, Vec2,
     ahash::{HashMap, HashMapExt},
-    epaint::CircleShape,
+    epaint::{CircleShape, TextShape},
 };
 use rand::{random_bool, random_range};
+use std::{
+    f32::{self, consts::PI},
+    fmt::Display,
+};
+use web_time::{Duration, Instant};
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() {
@@ -78,21 +82,64 @@ struct Pandemic {
     death_prob: f32,
     step_speed: f32,
     paused: bool,
+    graph: GraphOptions,
 
     // Data
     grid: SpatialGrid,
     last_frame_time: Instant,
     time_elapsed: Duration,
+
+    // Stats
+    num_healthy: usize,
+    num_infected: usize,
+    num_recovered: usize,
+    num_dead: usize,
+    stats: Vec<PandemicSnapshot>,
 }
 
 impl App for Pandemic {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::TopBottomPanel::bottom("control_panel")
-            .exact_height(400.)
+        egui::TopBottomPanel::bottom("info_panel")
+            .exact_height(450.)
             .show(ctx, |ui| {
                 egui::SidePanel::left("params")
                     .exact_width(250.)
                     .show_inside(ui, |ui| self.params_ui(ui));
+                
+                Frame::new()
+                    .outer_margin(
+                        Margin::symmetric(20, 30)
+                    )
+                    .show(ui, |ui| {
+                        ui.vertical(|ui| {
+                            ComboBox::from_id_salt("graph_display")
+                                .selected_text(format!("{}", self.graph))
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(
+                                        &mut self.graph,
+                                        GraphOptions::Healthy,
+                                        format!("{}", GraphOptions::Healthy),
+                                    );
+                                    ui.selectable_value(
+                                        &mut self.graph,
+                                        GraphOptions::Infected,
+                                        format!("{}", GraphOptions::Infected),
+                                    );
+                                    ui.selectable_value(
+                                        &mut self.graph,
+                                        GraphOptions::Recovered,
+                                        format!("{}", GraphOptions::Recovered),
+                                    );
+                                    ui.selectable_value(
+                                        &mut self.graph,
+                                        GraphOptions::Dead,
+                                        format!("{}", GraphOptions::Dead),
+                                    );
+                                });
+                            ui.add_space(20.);
+                            self.graph_ui(ui);
+                        });
+                    });
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -123,15 +170,22 @@ impl Pandemic {
             death_prob: 0.1,
             step_speed: 1.0,
             paused: false,
+            graph: GraphOptions::Infected,
 
             grid: SpatialGrid::new_with_capacity(infected, total),
             last_frame_time: Instant::now(),
             time_elapsed: Duration::ZERO,
+
+            num_healthy: total - infected,
+            num_infected: infected,
+            num_recovered: 0,
+            num_dead: 0,
+            stats: Vec::new(),
         }
     }
 
     fn params_ui(&mut self, ui: &mut Ui) {
-        ui.add_space(20.);
+        ui.add_space(15.);
 
         ui.heading("Controls");
         Grid::new("playback_keys").show(ui, |ui| {
@@ -157,7 +211,7 @@ impl Pandemic {
                 let infection_prob = self.infection_prob;
                 let infection_time_s = self.infection_time_s;
                 let death_prob = self.death_prob;
-                
+
                 *self = Self::new(self.init_infected, self.total);
                 self.infection_prob = infection_prob;
                 self.infection_time_s = infection_time_s;
@@ -165,7 +219,7 @@ impl Pandemic {
                 self.paused = true;
             }
         });
-        ui.add_space(20.);
+        ui.add_space(15.);
 
         ui.heading("Initial conditions");
         ui.add(Label::new("Initial infected"));
@@ -173,7 +227,7 @@ impl Pandemic {
 
         ui.add(Label::new("Total people"));
         ui.add(Slider::new(&mut self.total, 0..=10000));
-        ui.add_space(20.);
+        ui.add_space(15.);
 
         ui.heading("Simulation parameters");
         ui.add(Label::new("Death probability"));
@@ -184,12 +238,102 @@ impl Pandemic {
 
         ui.add(Label::new("Infection time (days)"));
         ui.add(Slider::new(&mut self.infection_time_s, 0.0..=30.0));
-        ui.add_space(20.);
+        ui.add_space(15.);
 
         ui.add(Label::new(format!(
-            "Current time: {:.1} days",
+            r#"Healthy: {} individuals
+Infected: {} individuals
+Recovered: {} individuals
+Dead: {} individuals
+Current time: {:.1} days"#,
+            self.num_healthy,
+            self.num_infected,
+            self.num_recovered,
+            self.num_dead,
             self.time_elapsed.as_secs_f32()
         )));
+    }
+
+    fn graph_ui(&self, ui: &mut Ui) {
+        macro_rules! map_stats {
+            ($field:ident) => {
+                self.stats
+                    .iter()
+                    .map(|stat| (stat.time, stat.$field))
+                    .collect()
+            };
+        }
+
+        let (times, stats): (Vec<Duration>, Vec<usize>) = match self.graph {
+            GraphOptions::Healthy => map_stats!(num_healthy),
+            GraphOptions::Infected => map_stats!(num_infected),
+            GraphOptions::Recovered => map_stats!(num_recovered),
+            GraphOptions::Dead => map_stats!(num_dead),
+        };
+
+        if let [.., max_time] = times[..] {
+            let max_time = max_time.as_millis();
+            let num_individuals =
+                self.num_healthy + self.num_infected + self.num_recovered + self.num_dead;
+
+            let painter = ui.painter();
+            let rect = ui.available_rect_before_wrap();
+            let min = rect.min;
+            let max = rect.max;
+
+            let x_axis_text =
+                painter.layout_no_wrap(self.graph.to_string(), FontId::default(), Color32::GRAY);
+            let _x_axis = painter.add(TextShape::new(
+                Pos2 {
+                    x: min.x + rect.width() / 2.0,
+                    y: max.y,
+                },
+                x_axis_text.clone(),
+                Color32::GRAY,
+            ));
+            let y_axis_text =
+                painter.layout_no_wrap("time".to_owned(), FontId::default(), Color32::GRAY);
+            let _y_axis = painter.add(
+                TextShape::new(
+                    Pos2 {
+                        x: min.x,
+                        y: min.y + rect.height() / 2.0,
+                    },
+                    y_axis_text.clone(),
+                    Color32::GRAY,
+                )
+                .with_angle(1.5 * PI),
+            );
+
+            let mut x_offset = min.x + y_axis_text.rect.max.x + 5.0;
+            let mut y_offset = max.y + x_axis_text.rect.min.y - 5.0;
+            let _x_axis = painter.add(Shape::LineSegment {
+                points: [Pos2 { x: x_offset, y: y_offset }, Pos2 { x: max.x, y: y_offset }],
+                stroke: Stroke::new(1.0, Color32::GRAY),
+            });
+            let _y_axis = painter.add(Shape::LineSegment {
+                points: [Pos2 { x: x_offset, y: min.y + 5.0 }, Pos2 { x: x_offset, y: y_offset }],
+                stroke: Stroke::new(1.0, Color32::GRAY),
+            });
+            x_offset += 1.5;
+            y_offset -= 1.5;
+            let (w, h) = (max.x - x_offset - 4.0, y_offset - min.y - 4.0);
+
+            let points = times.into_iter().zip(stats.into_iter()).map(|(t, s)| {
+                let x = t.as_millis() as f32 / max_time as f32;
+                let y = s as f32 / num_individuals as f32;
+                Shape::Circle(CircleShape {
+                    center: Pos2 {
+                        x: x_offset + x * w,
+                        y: y_offset - y * h,
+                    },
+                    radius: 2.0,
+                    fill: Color32::GRAY,
+                    stroke: Stroke::NONE,
+                })
+            });
+            painter.extend(points);
+        }
     }
 
     fn step(&mut self) {
@@ -206,13 +350,12 @@ impl Pandemic {
         let survive_this_frame = survival_prob.powf(frame_time / infection_time) as f64;
         let infection_prob = 1.0 - self.infection_prob;
         // Somewhat bastardized estimation
-        let not_infected_this_frame =
-            infection_prob.powf(frame_time / (1.0 / MOVE_AMOUNT)) as f64;
+        let not_infected_this_frame = infection_prob.powf(frame_time / (1.5 / MOVE_AMOUNT)) as f64;
 
+        let mut people_to_move = Vec::new();
         // Iterate over rows and cols
         for x_pos in 0..X_MAX {
             for y_pos in 0..Y_MAX {
-                let mut people_to_move = Vec::new();
                 // Get everyone in grid element
                 if let Some(people) = self.grid.0.get_mut(&(x_pos, y_pos)) {
                     // Step each individual
@@ -246,12 +389,16 @@ impl Pandemic {
                             let died = random_bool(1.0 - survive_this_frame);
                             if died {
                                 person.state = InfectionState::Dead;
+                                self.num_infected -= 1;
+                                self.num_dead += 1;
                                 return true;
                             }
 
                             // Update infection time
                             let new_infection_time = t + frame_time;
                             person.state = if new_infection_time > infection_time {
+                                self.num_infected -= 1;
+                                self.num_recovered += 1;
                                 InfectionState::Recovered
                             } else {
                                 InfectionState::Infected(new_infection_time)
@@ -272,6 +419,8 @@ impl Pandemic {
                         for person in people {
                             match (person.state, random_bool(1.0 - not_infected_this_frame)) {
                                 (InfectionState::Healthy, true) => {
+                                    self.num_healthy -= 1;
+                                    self.num_infected += 1;
                                     person.state = InfectionState::Infected(0.0)
                                 }
                                 _ => {}
@@ -279,19 +428,27 @@ impl Pandemic {
                         }
                     }
                 }
-                // If people need to be moved, move them
-                for person in people_to_move {
-                    if person.state == InfectionState::Dead {
-                        continue;
-                    }
-                    self.grid
-                        .0
-                        .entry((person.pos.x as i32, person.pos.y as i32))
-                        .or_default()
-                        .push(person);
-                }
+                // Move all people that need to be moved
             }
         }
+        for person in people_to_move {
+            if person.state == InfectionState::Dead {
+                continue;
+            }
+            self.grid
+                .0
+                .entry((person.pos.x as i32, person.pos.y as i32))
+                .or_default()
+                .push(person);
+        }
+
+        self.stats.push(PandemicSnapshot {
+            time: self.time_elapsed,
+            num_healthy: self.num_healthy,
+            num_infected: self.num_infected,
+            num_recovered: self.num_recovered,
+            num_dead: self.num_dead,
+        });
     }
 }
 
@@ -387,4 +544,34 @@ enum InfectionState {
     Infected(f32),
     Recovered,
     Dead,
+}
+
+struct PandemicSnapshot {
+    time: Duration,
+    num_healthy: usize,
+    num_infected: usize,
+    num_recovered: usize,
+    num_dead: usize,
+}
+
+#[derive(PartialEq)]
+enum GraphOptions {
+    Healthy,
+    Infected,
+    Recovered,
+    Dead,
+}
+impl Display for GraphOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} Individuals",
+            match self {
+                Self::Healthy => "Healthy",
+                Self::Infected => "Infected",
+                Self::Recovered => "Recovered",
+                Self::Dead => "Dead",
+            }
+        )
+    }
 }
