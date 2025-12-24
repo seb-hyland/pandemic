@@ -3,5 +3,5 @@
 set -eu pipefail
 
 trunk build --release
-rm -r docs/
+rm -rf docs/
 mv dist/ docs/
