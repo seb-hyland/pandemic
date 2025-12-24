@@ -1,7 +1,7 @@
 use eframe::App;
 use egui::{
-    Button, Color32, ComboBox, FontId, Frame, Grid, Label, Margin, Pos2,
-    Shape, Slider, Stroke, Ui, Vec2,
+    Button, Color32, ComboBox, FontId, Frame, Grid, Label, Margin, Pos2, Shape, Slider, Stroke, Ui,
+    Vec2,
     ahash::{HashMap, HashMapExt},
     epaint::{CircleShape, TextShape},
 };
@@ -105,40 +105,11 @@ impl App for Pandemic {
                 egui::SidePanel::left("params")
                     .exact_width(250.)
                     .show_inside(ui, |ui| self.params_ui(ui));
-                
+
                 Frame::new()
-                    .outer_margin(
-                        Margin::symmetric(20, 30)
-                    )
+                    .outer_margin(Margin::symmetric(20, 30))
                     .show(ui, |ui| {
-                        ui.vertical(|ui| {
-                            ComboBox::from_id_salt("graph_display")
-                                .selected_text(format!("{}", self.graph))
-                                .show_ui(ui, |ui| {
-                                    ui.selectable_value(
-                                        &mut self.graph,
-                                        GraphOptions::Healthy,
-                                        format!("{}", GraphOptions::Healthy),
-                                    );
-                                    ui.selectable_value(
-                                        &mut self.graph,
-                                        GraphOptions::Infected,
-                                        format!("{}", GraphOptions::Infected),
-                                    );
-                                    ui.selectable_value(
-                                        &mut self.graph,
-                                        GraphOptions::Recovered,
-                                        format!("{}", GraphOptions::Recovered),
-                                    );
-                                    ui.selectable_value(
-                                        &mut self.graph,
-                                        GraphOptions::Dead,
-                                        format!("{}", GraphOptions::Dead),
-                                    );
-                                });
-                            ui.add_space(20.);
-                            self.graph_ui(ui);
-                        });
+                        self.graph_ui(ui);
                     });
             });
 
@@ -254,86 +225,136 @@ Current time: {:.1} days"#,
         )));
     }
 
-    fn graph_ui(&self, ui: &mut Ui) {
-        macro_rules! map_stats {
-            ($field:ident) => {
-                self.stats
-                    .iter()
-                    .map(|stat| (stat.time, stat.$field))
-                    .collect()
+    fn graph_ui(&mut self, ui: &mut Ui) {
+        ui.vertical(|ui| {
+            // Graph selector
+            ComboBox::from_id_salt("graph_display")
+                .selected_text(format!("{}", self.graph))
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(
+                        &mut self.graph,
+                        GraphOptions::Healthy,
+                        format!("{}", GraphOptions::Healthy),
+                    );
+                    ui.selectable_value(
+                        &mut self.graph,
+                        GraphOptions::Infected,
+                        format!("{}", GraphOptions::Infected),
+                    );
+                    ui.selectable_value(
+                        &mut self.graph,
+                        GraphOptions::Recovered,
+                        format!("{}", GraphOptions::Recovered),
+                    );
+                    ui.selectable_value(
+                        &mut self.graph,
+                        GraphOptions::Dead,
+                        format!("{}", GraphOptions::Dead),
+                    );
+                });
+            ui.add_space(20.);
+
+            macro_rules! map_stats {
+                ($field:ident) => {
+                    self.stats
+                        .iter()
+                        .map(|stat| (stat.time, stat.$field))
+                        .collect()
+                };
+            }
+
+            let (times, stats): (Vec<Duration>, Vec<usize>) = match self.graph {
+                GraphOptions::Healthy => map_stats!(num_healthy),
+                GraphOptions::Infected => map_stats!(num_infected),
+                GraphOptions::Recovered => map_stats!(num_recovered),
+                GraphOptions::Dead => map_stats!(num_dead),
             };
-        }
 
-        let (times, stats): (Vec<Duration>, Vec<usize>) = match self.graph {
-            GraphOptions::Healthy => map_stats!(num_healthy),
-            GraphOptions::Infected => map_stats!(num_infected),
-            GraphOptions::Recovered => map_stats!(num_recovered),
-            GraphOptions::Dead => map_stats!(num_dead),
-        };
+            if let [.., max_time] = times[..] {
+                let max_time = max_time.as_millis();
+                let num_individuals =
+                    self.num_healthy + self.num_infected + self.num_recovered + self.num_dead;
 
-        if let [.., max_time] = times[..] {
-            let max_time = max_time.as_millis();
-            let num_individuals =
-                self.num_healthy + self.num_infected + self.num_recovered + self.num_dead;
+                let painter = ui.painter();
+                let rect = ui.available_rect_before_wrap();
+                let min = rect.min;
+                let max = rect.max;
 
-            let painter = ui.painter();
-            let rect = ui.available_rect_before_wrap();
-            let min = rect.min;
-            let max = rect.max;
-
-            let x_axis_text =
-                painter.layout_no_wrap(self.graph.to_string(), FontId::default(), Color32::GRAY);
-            let _x_axis = painter.add(TextShape::new(
-                Pos2 {
-                    x: min.x + rect.width() / 2.0,
-                    y: max.y,
-                },
-                x_axis_text.clone(),
-                Color32::GRAY,
-            ));
-            let y_axis_text =
-                painter.layout_no_wrap("time".to_owned(), FontId::default(), Color32::GRAY);
-            let _y_axis = painter.add(
-                TextShape::new(
-                    Pos2 {
-                        x: min.x,
-                        y: min.y + rect.height() / 2.0,
-                    },
-                    y_axis_text.clone(),
+                let x_axis_text = painter.layout_no_wrap(
+                    self.graph.to_string(),
+                    FontId::default(),
                     Color32::GRAY,
-                )
-                .with_angle(1.5 * PI),
-            );
-
-            let mut x_offset = min.x + y_axis_text.rect.max.x + 5.0;
-            let mut y_offset = max.y + x_axis_text.rect.min.y - 5.0;
-            let _x_axis = painter.add(Shape::LineSegment {
-                points: [Pos2 { x: x_offset, y: y_offset }, Pos2 { x: max.x, y: y_offset }],
-                stroke: Stroke::new(1.0, Color32::GRAY),
-            });
-            let _y_axis = painter.add(Shape::LineSegment {
-                points: [Pos2 { x: x_offset, y: min.y + 5.0 }, Pos2 { x: x_offset, y: y_offset }],
-                stroke: Stroke::new(1.0, Color32::GRAY),
-            });
-            x_offset += 1.5;
-            y_offset -= 1.5;
-            let (w, h) = (max.x - x_offset - 4.0, y_offset - min.y - 4.0);
-
-            let points = times.into_iter().zip(stats.into_iter()).map(|(t, s)| {
-                let x = t.as_millis() as f32 / max_time as f32;
-                let y = s as f32 / num_individuals as f32;
-                Shape::Circle(CircleShape {
-                    center: Pos2 {
-                        x: x_offset + x * w,
-                        y: y_offset - y * h,
+                );
+                let _x_axis = painter.add(TextShape::new(
+                    Pos2 {
+                        x: min.x + rect.width() / 2.0,
+                        y: max.y,
                     },
-                    radius: 2.0,
-                    fill: Color32::GRAY,
-                    stroke: Stroke::NONE,
-                })
-            });
-            painter.extend(points);
-        }
+                    x_axis_text.clone(),
+                    Color32::GRAY,
+                ));
+                let y_axis_text =
+                    painter.layout_no_wrap("time".to_owned(), FontId::default(), Color32::GRAY);
+                let _y_axis = painter.add(
+                    TextShape::new(
+                        Pos2 {
+                            x: min.x,
+                            y: min.y + rect.height() / 2.0,
+                        },
+                        y_axis_text.clone(),
+                        Color32::GRAY,
+                    )
+                    .with_angle(1.5 * PI),
+                );
+
+                let mut x_offset = min.x + y_axis_text.rect.max.x + 5.0;
+                let mut y_offset = max.y + x_axis_text.rect.min.y - 5.0;
+                let _x_axis = painter.add(Shape::LineSegment {
+                    points: [
+                        Pos2 {
+                            x: x_offset,
+                            y: y_offset,
+                        },
+                        Pos2 {
+                            x: max.x,
+                            y: y_offset,
+                        },
+                    ],
+                    stroke: Stroke::new(1.0, Color32::GRAY),
+                });
+                let _y_axis = painter.add(Shape::LineSegment {
+                    points: [
+                        Pos2 {
+                            x: x_offset,
+                            y: min.y + 5.0,
+                        },
+                        Pos2 {
+                            x: x_offset,
+                            y: y_offset,
+                        },
+                    ],
+                    stroke: Stroke::new(1.0, Color32::GRAY),
+                });
+                x_offset += 1.5;
+                y_offset -= 1.5;
+                let (w, h) = (max.x - x_offset - 4.0, y_offset - min.y - 4.0);
+
+                let points = times.into_iter().zip(stats.into_iter()).map(|(t, s)| {
+                    let x = t.as_millis() as f32 / max_time as f32;
+                    let y = s as f32 / num_individuals as f32;
+                    Shape::Circle(CircleShape {
+                        center: Pos2 {
+                            x: x_offset + x * w,
+                            y: y_offset - y * h,
+                        },
+                        radius: 2.0,
+                        fill: Color32::GRAY,
+                        stroke: Stroke::NONE,
+                    })
+                });
+                painter.extend(points);
+            }
+        });
     }
 
     fn step(&mut self) {
@@ -354,83 +375,78 @@ Current time: {:.1} days"#,
 
         let mut people_to_move = Vec::new();
         // Iterate over rows and cols
-        for x_pos in 0..X_MAX {
-            for y_pos in 0..Y_MAX {
-                // Get everyone in grid element
-                if let Some(people) = self.grid.0.get_mut(&(x_pos, y_pos)) {
-                    // Step each individual
-                    let dist_to_move = MOVE_AMOUNT * frame_time;
-                    people_to_move.extend(people.extract_if(.., |person| {
-                        // Step direction
-                        let pos = &mut person.pos;
-                        let dir = person.direction;
-                        let (x_comp, y_comp) = f32::sin_cos(dir);
-                        pos.x = pos.x + (dist_to_move * x_comp);
-                        pos.y = pos.y + (dist_to_move * y_comp);
+        for ((x_pos, y_pos), people) in self.grid.0.iter_mut() {
+            // Step each individual
+            let dist_to_move = MOVE_AMOUNT * frame_time;
+            people_to_move.extend(people.extract_if(.., |person| {
+                // Step direction
+                let pos = &mut person.pos;
+                let dir = person.direction;
+                let (x_comp, y_comp) = f32::sin_cos(dir);
+                pos.x = pos.x + (dist_to_move * x_comp);
+                pos.y = pos.y + (dist_to_move * y_comp);
 
-                        // If OOB, flip direction & reflect back
-                        if pos.x < 0.0 {
-                            pos.x = -pos.x;
-                            person.direction = -dir;
-                        } else if pos.x > X_MAX_FLOAT {
-                            pos.x = 2.0 * X_MAX_FLOAT - pos.x;
-                            person.direction = -dir;
+                // If OOB, flip direction & reflect back
+                if pos.x < 0.0 {
+                    pos.x = -pos.x;
+                    person.direction = -dir;
+                } else if pos.x > X_MAX_FLOAT {
+                    pos.x = 2.0 * X_MAX_FLOAT - pos.x;
+                    person.direction = -dir;
+                }
+                if pos.y < 0.0 {
+                    pos.y = -pos.y;
+                    person.direction = PI - dir;
+                } else if pos.y > Y_MAX_FLOAT {
+                    pos.y = 2.0 * Y_MAX_FLOAT - pos.y;
+                    person.direction = PI - dir;
+                }
+
+                if let InfectionState::Infected(t) = person.state {
+                    // Chance to die
+                    let died = random_bool(1.0 - survive_this_frame);
+                    if died {
+                        person.state = InfectionState::Dead;
+                        self.num_infected -= 1;
+                        self.num_dead += 1;
+                        return true;
+                    }
+
+                    // Update infection time
+                    let new_infection_time = t + frame_time;
+                    person.state = if new_infection_time > infection_time {
+                        self.num_infected -= 1;
+                        self.num_recovered += 1;
+                        InfectionState::Recovered
+                    } else {
+                        InfectionState::Infected(new_infection_time)
+                    };
+                }
+
+                // Do not retain if out of grid element
+                let grid_x = pos.x as i32;
+                let grid_y = pos.y as i32;
+                grid_x != *x_pos || grid_y != *y_pos
+            }));
+
+            // Infection testing
+            let contains_infected = people
+                .iter()
+                .any(|person| matches!(person.state, InfectionState::Infected(_)));
+            if contains_infected {
+                for person in people {
+                    match (person.state, random_bool(1.0 - not_infected_this_frame)) {
+                        (InfectionState::Healthy, true) => {
+                            self.num_healthy -= 1;
+                            self.num_infected += 1;
+                            person.state = InfectionState::Infected(0.0)
                         }
-                        if pos.y < 0.0 {
-                            pos.y = -pos.y;
-                            person.direction = PI - dir;
-                        } else if pos.y > Y_MAX_FLOAT {
-                            pos.y = 2.0 * Y_MAX_FLOAT - pos.y;
-                            person.direction = PI - dir;
-                        }
-
-                        if let InfectionState::Infected(t) = person.state {
-                            // Chance to die
-                            let died = random_bool(1.0 - survive_this_frame);
-                            if died {
-                                person.state = InfectionState::Dead;
-                                self.num_infected -= 1;
-                                self.num_dead += 1;
-                                return true;
-                            }
-
-                            // Update infection time
-                            let new_infection_time = t + frame_time;
-                            person.state = if new_infection_time > infection_time {
-                                self.num_infected -= 1;
-                                self.num_recovered += 1;
-                                InfectionState::Recovered
-                            } else {
-                                InfectionState::Infected(new_infection_time)
-                            };
-                        }
-
-                        // Do not retain if out of grid element
-                        let grid_x = pos.x as i32;
-                        let grid_y = pos.y as i32;
-                        grid_x != x_pos || grid_y != y_pos
-                    }));
-
-                    // Infection testing
-                    let contains_infected = people
-                        .iter()
-                        .any(|person| matches!(person.state, InfectionState::Infected(_)));
-                    if contains_infected {
-                        for person in people {
-                            match (person.state, random_bool(1.0 - not_infected_this_frame)) {
-                                (InfectionState::Healthy, true) => {
-                                    self.num_healthy -= 1;
-                                    self.num_infected += 1;
-                                    person.state = InfectionState::Infected(0.0)
-                                }
-                                _ => {}
-                            }
-                        }
+                        _ => {}
                     }
                 }
-                // Move all people that need to be moved
             }
         }
+        // Move all people that need to be moved
         for person in people_to_move {
             if person.state == InfectionState::Dead {
                 continue;
