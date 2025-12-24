@@ -369,9 +369,9 @@ Current time: {:.1} days"#,
         let infection_time = self.infection_time_s * 1000.0;
         let survival_prob = 1.0 - self.death_prob;
         let survive_this_frame = survival_prob.powf(frame_time / infection_time) as f64;
-        let infection_prob = 1.0 - self.infection_prob;
+        let non_infection_prob = 1.0 - self.infection_prob;
         // Somewhat bastardized estimation
-        let not_infected_this_frame = infection_prob.powf(frame_time / (1.5 / MOVE_AMOUNT)) as f64;
+        let not_infected_this_frame = non_infection_prob.powf(frame_time * MOVE_AMOUNT) as f64;
 
         let mut people_to_move = Vec::new();
         // Iterate over rows and cols
