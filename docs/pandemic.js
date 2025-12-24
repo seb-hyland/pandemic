@@ -296,15 +296,15 @@ function wasm_bindgen__convert__closures_____invoke__hdc57ad09edae0383(arg0, arg
     wasm.wasm_bindgen__convert__closures_____invoke__hdc57ad09edae0383(arg0, arg1, arg2);
 }
 
-function wasm_bindgen__convert__closures_____invoke__h400b7da14faa11b4(arg0, arg1, arg2) {
-    wasm.wasm_bindgen__convert__closures_____invoke__h400b7da14faa11b4(arg0, arg1, arg2);
-}
-
 function wasm_bindgen__convert__closures_____invoke__h9c4d24585f3328b3(arg0, arg1) {
     const ret = wasm.wasm_bindgen__convert__closures_____invoke__h9c4d24585f3328b3(arg0, arg1);
     if (ret[1]) {
         throw takeFromExternrefTable0(ret[0]);
     }
+}
+
+function wasm_bindgen__convert__closures_____invoke__h400b7da14faa11b4(arg0, arg1, arg2) {
+    wasm.wasm_bindgen__convert__closures_____invoke__h400b7da14faa11b4(arg0, arg1, arg2);
 }
 
 const __wbindgen_enum_ResizeObserverBoxOptions = ["border-box", "content-box", "device-pixel-content-box"];
